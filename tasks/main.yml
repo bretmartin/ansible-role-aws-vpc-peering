@@ -1,0 +1,86 @@
+---
+
+- name: set global facts
+  set_fact:
+    _aws_vpcs: '{{ groups["aws-vpcs"] | sort }}'
+
+- include: roles/aws-vpc/tasks/vpc_id.yml
+
+- name: get AWS account number
+  command: >
+    aws sts get-caller-identity
+            --output text
+            --profile '{{ aws_profile }}'
+            --query 'Account'
+  register: _aws_vpc_account
+  changed_when: False
+
+- name: set VPC account, ID, and name dictionary facts
+  set_fact:
+    _aws_vpc_accounts: >
+      {{ _aws_vpc_accounts
+         | default({})
+         | combine({item: hostvars[item]["_aws_vpc_account"].stdout}) }}
+    _aws_vpc_ids: >
+      {{ _aws_vpc_ids
+         | default({})
+         | combine({item: hostvars[item]["_aws_vpc_id"]}) }}
+    _aws_vpc_names: >
+      {{ _aws_vpc_names
+         | default({})
+         | combine({hostvars[item]["_aws_vpc_id"]: item}) }}
+  with_items: '{{ _aws_vpcs }}'
+  when: '"_aws_vpc_id" in hostvars[item]'
+
+- name: request VPC peering connections
+  ec2_vpc_peer:
+    peer_owner_id: '{{ _aws_vpc_accounts[item] }}'
+    peer_vpc_id: '{{ _aws_vpc_ids[item] }}'
+    profile: '{{ aws_profile }}'
+    region: '{{ aws_region }}'
+    state: present
+    tags:
+      Name: >
+        {{ ( _aws_vpc_names[_aws_vpc_id] + ' + ' + item )
+           | regex_replace('aws-vpc-', '') }}
+    vpc_id: '{{ _aws_vpc_id }}'
+  with_items: '{{ _aws_vpcs }}'
+  when: >
+    "_aws_vpc_id" in hostvars[item] and
+    inventory_hostname < item
+
+- name: pause 5 seconds before moving to acceptance phase
+  pause: seconds=5
+
+- name: describe pending-acceptance VPC peering connections
+  command: >
+    aws ec2 describe-vpc-peering-connections
+            --profile '{{ aws_profile }}'
+            --query 'VpcPeeringConnections
+                     [? Status.Code == `pending-acceptance`
+                        && AccepterVpcInfo.VpcId == `{{ _aws_vpc_id }}` ]'
+  register: _aws_vpc_pending_pcxs_command
+  changed_when: False
+
+- name: set pending-acceptance VPC peering connections fact
+  set_fact:
+    _aws_vpc_pending_pcxs: >
+      {{ _aws_vpc_pending_pcxs_command.stdout | from_json }}
+
+- name: accept VPC peering connections
+  ec2_vpc_peer:
+    peering_id: '{{ item.VpcPeeringConnectionId }}'
+    profile: '{{ aws_profile }}'
+    region: '{{ aws_region }}'
+    state: accept
+    tags:
+      Name: >
+        {{ ( _aws_vpc_names[_aws_vpc_id]
+             + ' + '
+             + _aws_vpc_names[item.RequesterVpcInfo.VpcId] )
+           | regex_replace('aws-vpc-', '') }}
+  with_items: '{{ _aws_vpc_pending_pcxs }}'
+  when: >
+    item.AccepterVpcInfo.VpcId == _aws_vpc_id and
+    item.RequesterVpcInfo.VpcId in _aws_vpc_names.keys() and
+    item.RequesterVpcInfo.OwnerId in _aws_vpc_accounts.values()
