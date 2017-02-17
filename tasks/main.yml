@@ -74,7 +74,7 @@
     region: '{{ aws_region }}'
     state: accept
     tags:
-      Name: >
+      Name: >-
         {{ ( _aws_vpc_names[_aws_vpc_id]
              + ' + '
              + _aws_vpc_names[item.RequesterVpcInfo.VpcId] )
