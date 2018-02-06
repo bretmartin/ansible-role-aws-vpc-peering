@@ -4,7 +4,9 @@
   set_fact:
     _aws_vpcs: '{{ groups["aws-vpcs"] | sort }}'
 
-- include: roles/aws-vpc/tasks/vpc_id.yml
+- include_role:
+    name: aws-vpc
+    tasks_from: vpc_id
 
 - name: get AWS account number
   command: >
