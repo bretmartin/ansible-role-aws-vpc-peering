@@ -36,11 +36,9 @@
 
 - name: request VPC peering connections
   ec2_vpc_peer:
-    profile: '{{ aws_profile }}'
-    # this Ansible module supports automatic role assumption
-
     peer_owner_id: '{{ _aws_vpc_accounts[item] }}'
     peer_vpc_id: '{{ _aws_vpc_ids[item] }}'
+    profile: '{{ aws_profile }}'
     region: '{{ aws_region }}'
     state: present
     tags:
@@ -73,10 +71,8 @@
 
 - name: accept VPC peering connections
   ec2_vpc_peer:
-    profile: '{{ aws_profile }}'
-    # this Ansible module supports automatic role assumption
-
     peering_id: '{{ item.VpcPeeringConnectionId }}'
+    profile: '{{ aws_profile }}'
     region: '{{ aws_region }}'
     state: accept
     tags:
