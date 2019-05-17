@@ -2,7 +2,7 @@
 
 - name: set global facts
   set_fact:
-    _aws_vpcs: '{{ groups["aws-vpcs"] | sort }}'
+    _aws_vpcs: '{{ groups["aws_vpcs"] | sort }}'
 
 - include_role:
     name: aws-vpc
